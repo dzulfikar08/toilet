@@ -69,7 +69,7 @@ A thief can't stop it without your password.
 
 ## Get the Binary
 
-Don't want the manual steps? [Buy the pre-built binary for $1 →](https://dzulfikar08.gumroad.com/l/toilet)
+Don't want the manual steps? [Buy the pre-built binary for $1 →](https://dzulfikarat.gumroad.com/l/toilet)
 
 ## License
 
