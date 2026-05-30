@@ -14,7 +14,7 @@ CYAN='\033[36m'
 DIM='\033[2m'
 RESET='\033[0m'
 
-REPO="USER/toilet"
+REPO="dzulfikar08/toilet"
 DEST="/usr/local/bin/toilet"
 
 printf "${BOLD}${CYAN}🚽 Installing toilet...${RESET}\n\n"

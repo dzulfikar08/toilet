@@ -13,7 +13,7 @@ When someone unplugs your charger, it:
 
 ```bash
 # Install
-curl -sL https://raw.githubusercontent.com/USER/toilet/main/install.sh | bash
+curl -sL https://raw.githubusercontent.com/dzulfikar08/toilet/main/install.sh | bash
 
 # Install camera tool
 brew install imagesnap
@@ -69,7 +69,7 @@ A thief can't stop it without your password.
 
 ## Get the Binary
 
-Don't want the manual steps? [Buy the pre-built binary for $1 →](https://GUMROAD_LINK)
+Don't want the manual steps? [Buy the pre-built binary for $1 →](https://dzulfikar08.gumroad.com/l/toilet)
 
 ## License
 
