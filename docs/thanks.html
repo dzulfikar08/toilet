@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Thanks! 🚽 toilet</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --surface2: #1a1a1a;
+    --border: #222;
+    --text: #e0e0e0;
+    --text-dim: #666;
+    --accent: #00ff41;
+    --glow: rgba(0, 255, 65, 0.15);
+    --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Menlo', monospace;
+    --sans: -apple-system, 'Helvetica Neue', system-ui, sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.6;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: -1;
+    background-image:
+      linear-gradient(rgba(0,255,65,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,65,0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+  }
+
+  .container {
+    text-align: center;
+    padding: 40px 24px;
+    max-width: 600px;
+  }
+
+  .emoji {
+    font-size: 80px;
+    display: inline-block;
+    animation: bounce-in 0.6s ease-out;
+    filter: drop-shadow(0 0 40px rgba(0,255,65,0.3));
+  }
+
+  @keyframes bounce-in {
+    0% { transform: scale(0) rotate(-180deg); opacity: 0; }
+    60% { transform: scale(1.2) rotate(10deg); }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  }
+
+  h1 {
+    font-family: var(--mono);
+    font-size: 32px;
+    font-weight: 800;
+    margin-top: 24px;
+    letter-spacing: -1px;
+    color: var(--accent);
+    text-shadow: 0 0 30px var(--glow);
+  }
+
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 18px;
+    margin-top: 8px;
+  }
+
+  .terminal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    font-family: var(--mono);
+    font-size: 13px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    margin-top: 40px;
+    text-align: left;
+  }
+
+  .terminal-bar {
+    background: var(--surface2);
+    padding: 10px 16px;
+    display: flex;
+    gap: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .terminal-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+  }
+  .terminal-dot:nth-child(1) { background: #ff5f57; }
+  .terminal-dot:nth-child(2) { background: #febc2e; }
+  .terminal-dot:nth-child(3) { background: #28c840; }
+
+  .terminal-body {
+    padding: 20px;
+    line-height: 2;
+  }
+
+  .prompt { color: var(--accent); }
+  .cmd { color: #fff; }
+  .comment { color: var(--text-dim); }
+  .success { color: var(--accent); }
+
+  .back-link {
+    display: inline-block;
+    margin-top: 32px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 14px;
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .back-link:hover { color: var(--accent); }
+
+  @media (max-width: 480px) {
+    h1 { font-size: 24px; }
+    .emoji { font-size: 60px; }
+    .terminal { font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="emoji">🚽</div>
+    <h1>you're all set.</h1>
+    <p class="subtitle">Thanks for supporting open source 💚</p>
+
+    <div class="terminal">
+      <div class="terminal-bar">
+        <div class="terminal-dot"></div>
+        <div class="terminal-dot"></div>
+        <div class="terminal-dot"></div>
+      </div>
+      <div class="terminal-body">
+        <div><span class="comment"># Unzip & install (30 seconds)</span></div>
+        <div><span class="prompt">~/Downloads $</span> <span class="cmd">unzip toilet-macos.zip</span></div>
+        <div><span class="prompt">~/Downloads $</span> <span class="cmd">sudo cp toilet /usr/local/bin/toilet</span></div>
+        <div></div>
+        <div><span class="comment"># Install camera tool</span></div>
+        <div><span class="prompt">~ $</span> <span class="cmd">brew install imagesnap</span></div>
+        <div></div>
+        <div><span class="comment"># Configure Telegram alerts</span></div>
+        <div><span class="prompt">~ $</span> <span class="cmd">toilet setup</span></div>
+        <div><span class="success">✓ Config saved</span></div>
+        <div></div>
+        <div><span class="comment"># Test everything works</span></div>
+        <div><span class="prompt">~ $</span> <span class="cmd">toilet test</span></div>
+        <div><span class="success">✓ All tests complete.</span></div>
+        <div></div>
+        <div><span class="comment"># Arm it (plug in charger first!)</span></div>
+        <div><span class="prompt">~ $</span> <span class="cmd">sudo toilet</span></div>
+        <div><span class="success">🚽 Monitoring...</span></div>
+      </div>
+    </div>
+
+    <a href="https://dzulfikar08.github.io/toilet/" class="back-link">← back to toilet.sh</a>
+  </div>
+</body>
+</html>
