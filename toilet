@@ -1,0 +1,315 @@
+#!/bin/bash
+#
+# toilet — Anti-theft alarm for macOS
+# Monitors charger, triggers alarm + camera + Telegram on unplug.
+#
+# Usage:
+#   sudo toilet          Start monitoring (must be charging)
+#   toilet setup         Configure Telegram bot token & chat ID
+#   toilet test          Test alarm + camera + Telegram
+#   toilet status        Show charging status & config
+#
+
+set -euo pipefail
+
+VERSION="1.0.0"
+
+CONFIG_DIR="$HOME/.config/toilet"
+CONFIG_FILE="$CONFIG_DIR/config"
+CAPTURE_DIR="/tmp/toilet_captures"
+WARMUP_PHOTO="/tmp/toilet_captures/warmup.jpg"
+
+# ─── Colors ───
+RED='\033[31m'
+GREEN='\033[32m'
+YELLOW='\033[33m'
+CYAN='\033[36m'
+DIM='\033[2m'
+BOLD='\033[1m'
+RESET='\033[0m'
+
+# ─── PIDs to track ───
+ALARM_PID=""
+CAMERA_PID=""
+
+# ─── Load config ───
+load_config() {
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        printf "${RED}No config found. Run: toilet setup${RESET}\n"
+        exit 1
+    fi
+    source "$CONFIG_FILE"
+}
+
+# ─── Charging detection ───
+is_charging() {
+    pmset -g batt 2>/dev/null | grep -q "AC Power"
+}
+
+# ─── Camera warmup: keeps camera alive during monitoring ───
+keep_camera_warm() {
+    mkdir -p "$CAPTURE_DIR"
+    while true; do
+        imagesnap -w 1 -q "$WARMUP_PHOTO" 2>/dev/null
+        sleep 3
+    done
+}
+
+# ─── Camera capture (fast — camera already warm) ───
+capture_photo() {
+    mkdir -p "$CAPTURE_DIR"
+    local ts=$(date +%Y%m%d_%H%M%S)
+    local photo="$CAPTURE_DIR/theft_${ts}.jpg"
+
+    if command -v imagesnap &>/dev/null; then
+        imagesnap -w 0.2 -q "$photo" 2>/dev/null
+    fi
+
+    if [[ -f "$photo" && -s "$photo" ]]; then
+        echo "$photo"
+    elif [[ -f "$WARMUP_PHOTO" && -s "$WARMUP_PHOTO" ]]; then
+        cp "$WARMUP_PHOTO" "$photo"
+        echo "$photo"
+    else
+        echo ""
+    fi
+}
+
+# ─── Telegram ───
+send_telegram() {
+    local photo="$1"
+    local caption
+    caption="⚠️ CHARGER UNPLUGGED!%0A$(date '+%Y-%m-%d %H:%M:%S')%0AHostname: $(hostname)"
+
+    if [[ -z "${TELEGRAM_BOT_TOKEN:-}" || -z "${TELEGRAM_CHAT_ID:-}" ]]; then
+        printf "${YELLOW}Telegram not configured. Skipping send.${RESET}\n"
+        return 1
+    fi
+
+    if [[ -n "$photo" && -f "$photo" ]]; then
+        curl -s --max-time 10 \
+            -F "chat_id=${TELEGRAM_CHAT_ID}" \
+            -F "caption=${caption}" \
+            -F "photo=@${photo}" \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto" \
+            >/dev/null 2>&1
+    else
+        curl -s --max-time 10 \
+            -d "chat_id=${TELEGRAM_CHAT_ID}" \
+            -d "text=${caption}%0A(Camera capture failed)" \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            >/dev/null 2>&1
+    fi
+}
+
+# ─── Alarm (sound + voice, loop) ───
+sound_alarm() {
+    osascript -e "set volume output volume 100" 2>/dev/null || true
+
+    while true; do
+        say -r 200 "Security alert! Device has been unplugged! Security alert!" 2>/dev/null &
+        afplay /System/Library/Sounds/Sosumi.aiff 2>/dev/null
+        afplay /System/Library/Sounds/Basso.aiff 2>/dev/null
+        sleep 0.3
+    done
+}
+
+# ─── Stop handler: pause alarm, ask for password ───
+stop_handler() {
+    local children=$(pgrep -P $ALARM_PID 2>/dev/null || true)
+    kill -STOP $children $ALARM_PID 2>/dev/null || true
+
+    printf "\n\n${BOLD}🔐 Enter your password to stop alarm:${RESET} "
+    read -rs password
+    echo
+
+    if dscl . -authonly "${SUDO_USER:-$USER}" "$password" &>/dev/null; then
+        kill -9 $children $ALARM_PID 2>/dev/null || true
+        kill -9 $CAMERA_PID 2>/dev/null || true
+        rm -f "$WARMUP_PHOTO"
+        printf "\n${GREEN}✓ Alarm stopped.${RESET}\n"
+        exit 0
+    else
+        printf "\n${RED}✗ Wrong password! Alarm continues!${RESET}\n"
+        kill -CONT $children $ALARM_PID 2>/dev/null || true
+    fi
+}
+
+# ─── Cleanup during monitoring (before alarm) ───
+cleanup() {
+    kill -9 $CAMERA_PID 2>/dev/null || true
+    rm -f "$WARMUP_PHOTO"
+    printf "\n${GREEN}toilet stopped.${RESET}\n"
+    exit 0
+}
+
+# ═══════════════════════════════════════
+# Commands
+# ═══════════════════════════════════════
+
+cmd_setup() {
+    printf "${BOLD}${CYAN}🚽 toilet — Telegram Setup${RESET}\n\n"
+    printf "1. Open Telegram, search ${BOLD}@BotFather${RESET}\n"
+    printf "2. Send ${BOLD}/newbot${RESET} and follow instructions\n"
+    printf "3. Copy the bot token\n"
+    printf "4. Send a message to your bot, then visit:\n"
+    printf "   ${DIM}https://api.telegram.org/bot<TOKEN>/getUpdates${RESET}\n"
+    printf "   to find your chat_id\n\n"
+
+    mkdir -p "$CONFIG_DIR"
+
+    read -rp "Enter Bot Token: " bot_token
+    read -rp "Enter Chat ID: " chat_id
+
+    cat > "$CONFIG_FILE" <<EOF
+# toilet - Anti-theft alarm config
+TELEGRAM_BOT_TOKEN="${bot_token}"
+TELEGRAM_CHAT_ID="${chat_id}"
+EOF
+
+    chmod 600 "$CONFIG_FILE"
+    printf "\n${GREEN}✓ Config saved to ${CONFIG_FILE}${RESET}\n"
+
+    load_config
+    printf "${DIM}Sending test message...${RESET}\n"
+    curl -s --max-time 10 \
+        -d "chat_id=${TELEGRAM_CHAT_ID}" \
+        -d "text=🚽 toilet alarm configured successfully!" \
+        "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+        >/dev/null 2>&1 && printf "${GREEN}✓ Test message sent!${RESET}\n" \
+        || printf "${YELLOW}✗ Failed to send. Check your token & chat ID.${RESET}\n"
+}
+
+cmd_test() {
+    load_config
+
+    printf "${BOLD}${CYAN}🚽 toilet — Test Mode${RESET}\n\n"
+
+    printf "${DIM}Testing camera...${RESET}\n"
+    local photo
+    photo=$(capture_photo)
+    if [[ -n "$photo" ]]; then
+        printf "${GREEN}✓ Camera OK${RESET} → ${photo}\n"
+    else
+        printf "${YELLOW}✗ Camera failed (install imagesnap?)${RESET}\n"
+    fi
+
+    printf "${DIM}Testing Telegram...${RESET}\n"
+    if send_telegram "${photo:-}"; then
+        printf "${GREEN}✓ Telegram OK${RESET}\n"
+    else
+        printf "${YELLOW}✗ Telegram failed${RESET}\n"
+    fi
+
+    printf "${DIM}Testing alarm (3s)...${RESET}\n"
+    osascript -e "set volume output volume 100" 2>/dev/null || true
+    say -r 200 "Test alarm. One two three." 2>/dev/null
+    afplay /System/Library/Sounds/Sosumi.aiff 2>/dev/null
+    printf "${GREEN}✓ Alarm OK${RESET}\n"
+
+    printf "\n${GREEN}All tests complete.${RESET}\n"
+}
+
+cmd_status() {
+    printf "${BOLD}${CYAN}🚽 toilet — Status${RESET}\n\n"
+
+    if is_charging; then
+        printf "Charging:  ${GREEN}YES ✓${RESET}\n"
+    else
+        printf "Charging:  ${RED}NO ✗${RESET}\n"
+    fi
+
+    if command -v imagesnap &>/dev/null; then
+        printf "Camera:    ${GREEN}imagesnap ✓${RESET}\n"
+    else
+        printf "Camera:    ${YELLOW}imagesnap not found (brew install imagesnap)${RESET}\n"
+    fi
+
+    if [[ -f "$CONFIG_FILE" ]]; then
+        load_config
+        if [[ -n "${TELEGRAM_BOT_TOKEN:-}" ]]; then
+            printf "Telegram:  ${GREEN}configured ✓${RESET}\n"
+        else
+            printf "Telegram:  ${YELLOW}not configured${RESET}\n"
+        fi
+    else
+        printf "Telegram:  ${YELLOW}no config (run: toilet setup)${RESET}\n"
+    fi
+
+    printf "\n${DIM}Config: ${CONFIG_FILE}${RESET}\n"
+}
+
+# ═══════════════════════════════════════
+# Main — Monitor mode
+# ═══════════════════════════════════════
+
+cmd_monitor() {
+    load_config
+
+    printf "${BOLD}${CYAN}🚽 toilet v${VERSION} — Anti-theft monitor${RESET}\n\n"
+
+    if ! is_charging; then
+        printf "${RED}✗ Not charging! Plug in first, then run toilet.${RESET}\n"
+        exit 1
+    fi
+
+    if ! command -v imagesnap &>/dev/null; then
+        printf "${YELLOW}⚠ imagesnap not found. Camera capture will fail.${RESET}\n"
+        printf "${DIM}  Install with: brew install imagesnap${RESET}\n\n"
+    else
+        keep_camera_warm &
+        CAMERA_PID=$!
+        printf "${DIM}📷 Camera warmed up (running in background)${RESET}\n"
+    fi
+
+    printf "Charging detected. ${GREEN}Monitoring...${RESET}\n"
+    printf "${DIM}Unplug → alarm. Ctrl+C or 'q' → stop (password required).${RESET}\n\n"
+
+    trap cleanup HUP INT QUIT TERM
+
+    while is_charging; do
+        sleep 2
+    done
+
+    # ═══════ TRIGGERED! ═══════
+    printf "\n${RED}${BOLD}⚡ CHARGER UNPLUGGED! ALARM TRIGGERED!${RESET}\n"
+
+    kill $CAMERA_PID 2>/dev/null || true
+
+    local photo
+    photo=$(capture_photo)
+    printf "${RED}📸 Photo captured${RESET}\n"
+
+    send_telegram "${photo:-}" &
+    printf "${RED}📨 Telegram alert sent${RESET}\n"
+
+    sound_alarm &
+    ALARM_PID=$!
+
+    trap stop_handler INT QUIT
+
+    printf "${RED}${BOLD}🔊 ALARM ON — Press Ctrl+C or 'q' + password to stop${RESET}\n"
+
+    while read -rsn1 key; do
+        if [[ "$key" == "q" ]]; then
+            stop_handler
+        fi
+    done
+}
+
+# ─── CLI dispatch ───
+case "${1:-}" in
+    setup)   cmd_setup ;;
+    test)    cmd_test ;;
+    status)  cmd_status ;;
+    help|--help|-h)
+        printf "${BOLD}toilet${RESET} v${VERSION} — Anti-theft alarm for macOS\n\n"
+        printf "  sudo toilet          Start monitoring (must be charging)\n"
+        printf "  toilet setup         Configure Telegram bot\n"
+        printf "  toilet test          Test alarm + camera + Telegram\n"
+        printf "  toilet status        Show current status\n"
+        ;;
+    *)
+        cmd_monitor
+        ;;
+esac
